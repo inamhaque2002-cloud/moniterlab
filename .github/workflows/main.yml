@@ -1,0 +1,78 @@
+name: Security Report Generation
+
+on:
+  schedule:
+    # Every Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  generate-security-report:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # to commit report.md / security.log
+      security-events: write   # if you use GitHub's code scanning
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js (if your project uses npm audit / etc.)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci    # or npm install --production
+
+      # Example: npm audit + custom scripts
+      - name: Run security checks
+        run: |
+          echo "Security scan started at $(date)" > security.log
+          echo "----------------------------------------" >> security.log
+          
+          npm audit --json >> security.log 2>&1 || true
+          
+          echo "" >> security.log
+          echo "Vulnerabilities found:" >> security.log
+          npm audit | grep -A 10 "found" >> security.log 2>&1 || true
+
+      # You can add more checks here:
+      # - Snyk (needs token)
+      # - Trivy for container scanning
+      # - dependency-check
+      # - secret scanning results, etc.
+
+      - name: Generate markdown report
+        run: |
+          echo "# Weekly Security Report" > report.md
+          echo "" >> report.md
+          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> report.md
+          echo "**Repository:** ${{ github.repository }}" >> report.md
+          echo "" >> report.md
+          
+          echo "## npm audit results" >> report.md
+          echo '```text' >> report.md
+          cat security.log >> report.md
+          echo '```' >> report.md
+
+      - name: Commit report files
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          git add security.log report.md
+          git commit -m "chore: weekly security report $(date -u '+%Y-%m-%d')" || echo "Nothing to commit"
+          git push
+
+      - name: Upload report as artifact (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: |
+            report.md
+            security.log
+          retention-days: 30
