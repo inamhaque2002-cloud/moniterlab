@@ -1,0 +1,25 @@
+#.github/workflows/security-report.yml
+name: Security Report Generation
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Security Report
+        run: |
+          # Collect security metrics
+          npm audit
+          npm outdated
+          # Generate report
+          echo "# Security Report" > report.md
+          echo "## Dependencies" >> report.md
+          npm audit >> report.md
+          
+      - name: Upload Report
+        uses: actions/upload-artifact@v2
+        with:
+          name: security-report
+          path: report.md
